@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>월배·월성 7대 단지 보안 관제탑 (Strict PIN 보안)</title>
+  
+  <!-- Pretendard & Chart.js -->
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    :root {
+      --blue: #0066FF; --blue-d: #0052CC; --blue-weak: #EBF3FF;
+      --fg-title: #0F172A; --fg-body: #334155; --fg-muted: #64748B;
+      --bg-page: #F8FAFC; --card-bg: #FFFFFF; --line: #E2E8F0;
+      --red: #DC2626; --red-weak: #FEF2F2; --green: #16A34A; --orange: #EA580C;
+      --purple: #7C3AED; --purple-weak: #F5F3FF;
+      --teal: #0D9488; --teal-weak: #CCFBF1;
+      --indigo: #4F46E5; --indigo-weak: #EEF2FF;
+      --r-md: 10px; --r-lg: 14px;
+      --font: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--font); }
+    html, body { min-height: 100%; width: 100%; background: var(--bg-page); color: var(--fg-body); }
+
+    /* Custom Smooth Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #F1F5F9; }
+    ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+    /* Security Auth Screen Overlay (Hidden by Default until check) */
+    .auth-overlay {
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: #0F172A; z-index: 9999; display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .auth-card {
+      background: #1E293B; border: 1px solid #334155; border-radius: 20px; width: 400px; max-width: 90vw;
+      padding: 36px 28px; display: flex; flex-direction: column; align-items: center; gap: 20px; text-align: center;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+    .auth-icon { font-size: 2.8rem; background: #334155; width: 72px; height: 72px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+    .auth-title { font-size: 1.3rem; font-weight: 800; color: #F8FAFC; }
+    .auth-desc { font-size: 0.85rem; color: #94A3B8; line-height: 1.4; }
+    .auth-pin-inp {
+      width: 100%; height: 50px; text-align: center; font-size: 1.5rem; font-weight: 800;
+      letter-spacing: 8px; border: 2px solid #475569; border-radius: 12px; background: #0F172A; color: #38BDF8; outline: none;
+    }
+    .auth-pin-inp:focus { border-color: #0066FF; box-shadow: 0 0 0 3px rgba(0,102,255,0.3); }
+    .btn-auth-submit {
+      width: 100%; height: 48px; background: #0066FF; color: #fff; border: none; border-radius: 12px;
+      font-size: 1.0rem; font-weight: 800; cursor: pointer; transition: background 0.2s;
+    }
+    .btn-auth-submit:hover { background: #0052CC; }
+
+    /* Hide Main Content Workspace until authenticated */
+    .app-container { display: none; }
+    .app-container.authenticated { display: block; }
+
+    /* Top Global Header */
+    header.global-bar {
+      height: 64px; min-height: 64px; background: #0F172A; color: #FFFFFF;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 20px; border-bottom: 1px solid #1E293B; z-index: 30; flex-shrink: 0;
+    }
+    .brand-title { font-size: 1.05rem; font-weight: 800; color: #FFFFFF; display:flex; align-items:center; gap:8px; }
+    .brand-badge { font-size: 0.72rem; font-weight: 700; background: linear-gradient(135deg, #DC2626, #7C3AED, #0066FF); color: #FFFFFF; padding: 3px 10px; border-radius: 6px; }
+    .header-metrics { display: flex; align-items: center; gap: 16px; }
+    .header-stat { display: flex; flex-direction: column; align-items: flex-end; }
+    .header-stat-label { font-size: 0.68rem; color: #94A3B8; font-weight: 600; }
+    .header-stat-val { font-size: 0.95rem; font-weight: 700; color: #F8FAFC; }
+
+    /* Mobile Toggle & Logout Buttons */
+    .btn-mobile-toggle {
+      display: none; height: 36px; padding: 0 12px; background: var(--blue); color: #fff;
+      border: none; border-radius: var(--r-md); font-size: 0.8rem; font-weight: 700; cursor: pointer;
+    }
+    .btn-logout {
+      height: 34px; padding: 0 12px; background: #334155; color: #F8FAFC; border: 1px solid #475569;
+      border-radius: var(--r-md); font-size: 0.78rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 4px;
+    }
+    .btn-logout:hover { background: #475569; }
+
+    /* Workspace 2-Column */
+    .workspace { display: grid; grid-template-columns: 360px 1fr; height: calc(100vh - 64px); overflow: hidden; }
+
+    /* Col 1: Left Navigation & Filters */
+    .col-left { background: var(--card-bg); border-right: 1px solid var(--line); display: flex; flex-direction: column; height: 100%; z-index: 10; overflow: hidden; }
+    .filter-section { padding: 16px; background: #F8FAFC; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; }
+    .filter-label { font-size: 0.73rem; font-weight: 700; color: var(--fg-muted); text-transform: uppercase; }
+    .filter-select { width: 100%; height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--r-md); font-size: 0.85rem; font-weight: 600; background: #fff; outline: none; }
+
+    .btn-add-complex {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      width: 100%; height: 38px; background: var(--blue); color: #FFFFFF; border: none;
+      border-radius: var(--r-md); font-size: 0.85rem; font-weight: 700; cursor: pointer;
+    }
+
+    .complex-scroll-list { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+    
+    /* Master All Card Styling */
+    .all-complex-card {
+      padding: 14px; border: 2px solid var(--blue); border-radius: var(--r-lg);
+      background: linear-gradient(135deg, #EBF3FF, #EEF2FF); cursor: pointer; transition: all 0.2s;
+    }
+    .all-complex-card.active { background: var(--blue); color: #fff; border-color: var(--blue-d); }
+    .all-complex-card.active .c-name, .all-complex-card.active .c-meta { color: #fff !important; }
+    .all-complex-card.active .c-badge { background: #fff; color: var(--blue); }
+
+    .complex-card { padding: 14px; border: 1px solid var(--line); border-radius: var(--r-lg); background: #fff; cursor: pointer; transition: all 0.2s; position: relative; }
+    .complex-card.active { border-color: var(--blue); background: var(--blue-weak); box-shadow: 0 0 0 2px var(--blue); }
+    .c-header { display: flex; justify-content: space-between; align-items: center; }
+    .c-name { font-size: 0.98rem; font-weight: 700; color: var(--fg-title); }
+    .c-badge { font-size: 0.72rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: var(--blue-weak); color: var(--blue); }
+    .c-meta { font-size: 0.78rem; color: var(--fg-muted); margin-top: 4px; }
+    .btn-del-card { position: absolute; right: 12px; bottom: 12px; font-size: 0.7rem; color: #94A3B8; background: none; border: none; cursor: pointer; }
+
+    /* Col 2: Main Analytical Data Canvas */
+    .col-right { background: var(--bg-page); display: flex; flex-direction: column; height: 100%; overflow-y: auto; padding: 20px 24px; gap: 16px; }
+    .panel-header-wrap { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid var(--line); padding-bottom: 10px; flex-shrink: 0; }
+    .panel-title { font-size: 1.35rem; font-weight: 800; color: var(--fg-title); display:flex; align-items:center; gap:8px; flex-wrap: wrap; }
+    .panel-subtitle { font-size: 0.85rem; color: var(--fg-muted); margin-top: 2px; }
+    .fact-tag { background: linear-gradient(135deg, #FEF2F2, #F5F3FF); color: #DC2626; font-size: 0.72rem; font-weight: 800; padding: 3px 8px; border-radius: 20px; border: 1px solid #FCA5A5; }
+    .apt-name-tag { background: #EEF2FF; color: #4F46E5; font-size: 0.72rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; border: 1px solid #C7D2FE; margin-right: 4px; }
+
+    /* 4-Grid KPI Cards */
+    .kpi-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; flex-shrink: 0; }
+    .kpi-card { background: #FFFFFF; border: 1px solid var(--line); border-radius: var(--r-lg); padding: 14px; display: flex; flex-direction: column; gap: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+    .kpi-title { font-size: 0.72rem; font-weight: 700; color: var(--fg-muted); }
+    .kpi-value { font-size: 1.25rem; font-weight: 800; color: var(--fg-title); }
+    .kpi-sub { font-size: 0.7rem; color: var(--fg-muted); }
+
+    /* Charts (Top Section) */
+    .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex-shrink: 0; }
+    .chart-box { background: #FFFFFF; border: 1px solid var(--line); border-radius: var(--r-lg); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+
+    /* Search & Quick Filter Bar for Table */
+    .search-filter-bar {
+      background: #FFFFFF; border: 1px solid var(--line); border-radius: var(--r-lg);
+      padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-shrink: 0; flex-wrap: wrap;
+    }
+    .search-inp-wrap { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 240px; }
+    .search-inp { width: 100%; height: 36px; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--r-md); font-size: 0.85rem; font-weight: 600; outline: none; }
+    .filter-chips-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
+    .f-chip { font-size: 0.72rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; cursor: pointer; border: 1px solid var(--line); background: #F8FAFC; color: #475569; white-space: nowrap; }
+    .f-chip.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+
+    .btn-export { height: 36px; padding: 0 12px; background: #0F172A; color: #fff; border: none; border-radius: var(--r-md); font-size: 0.78rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+
+    /* Match Table (Bottom Main Container) */
+    .unit-table-container {
+      background: #FFFFFF; border: 1px solid var(--line); border-radius: var(--r-lg);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.02); flex: 1; min-height: 460px; overflow-x: auto; overflow-y: auto; position: relative; margin-bottom: 20px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .unit-table-header {
+      position: sticky; top: 0; z-index: 20; padding: 12px 16px; background: #F8FAFC;
+      border-bottom: 1px solid var(--line); font-size: 0.88rem; font-weight: 700;
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;
+    }
+    table.unit-table { width: 100%; min-width: 900px; border-collapse: collapse; font-size: 0.85rem; }
+    table.unit-table th, table.unit-table td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+    table.unit-table th { background: #FAFAFA; color: var(--fg-muted); font-weight: 600; position: sticky; top: 45px; z-index: 10; box-shadow: 0 1px 0 var(--line); }
+
+    /* Source Mini Badges Matrix */
+    .source-matrix { display: flex; gap: 3px; margin-top: 4px; flex-wrap: wrap; }
+    .src-badge { font-size: 0.6rem; font-weight: 800; padding: 2px 4px; border-radius: 3px; }
+    .src-molit { background: #DCFCE7; color: #15803D; }
+    .src-aipartner { background: #E0F2FE; color: #0369A1; }
+    .src-asil { background: #F5F3FF; color: #7C3AED; }
+    .src-aptgin { background: #CCFBF1; color: #0D9488; }
+    .src-hanbang { background: #EEF2FF; color: #4F46E5; }
+
+    .tag-renewed { background: #F5F3FF; color: #7C3AED; border: 1px solid #DDD6FE; font-weight: 800; padding: 2px 5px; border-radius: 4px; font-size: 0.68rem; }
+    .tag-new { background: #DCFCE7; color: #15803D; font-weight: 800; padding: 2px 5px; border-radius: 4px; font-size: 0.68rem; }
+    .tag-cycle-2027 { background: #F5F3FF; color: #7C3AED; font-weight: 800; padding: 2px 5px; border-radius: 4px; font-size: 0.68rem; border: 1px solid #DDD6FE; }
+    .tag-cycle-2nd { background: #E0F2FE; color: #0369A1; font-weight: 800; padding: 2px 5px; border-radius: 4px; font-size: 0.68rem; }
+    .tag-cycle-1st { background: #FEF2F2; color: #DC2626; font-weight: 800; padding: 2px 5px; border-radius: 4px; font-size: 0.68rem; }
+    .buyer-match-tag { background: #F0FDF4; color: #166534; border: 1px solid #BBF7D0; font-size: 0.7rem; font-weight: 800; padding: 2px 5px; border-radius: 4px; }
+    .asil-mml-badge { background: #E0F2FE; color: #0369A1; font-size: 0.7rem; font-weight: 800; padding: 2px 5px; border-radius: 4px; border: 1px solid #BAE6FD; }
+    .tag-exact { background: #38BDF8; color: #0369A1; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 0.68rem; }
+
+    /* Modal Styling */
+    .modal-overlay {
+      display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 100;
+      align-items: center; justify-content: center;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal-card {
+      background: #FFFFFF; width: 440px; max-width: 92vw; border-radius: var(--r-lg);
+      padding: 24px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 16px;
+    }
+    .modal-title { font-size: 1.2rem; font-weight: 800; color: var(--fg-title); }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-input { height: 42px; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--r-md); font-size: 0.9rem; outline: none; }
+    .quick-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { font-size: 0.72rem; font-weight: 600; background: #F1F5F9; color: #475569; padding: 4px 8px; border-radius: 999px; cursor: pointer; border: 1px solid #E2E8F0; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+    .btn-cancel { height: 38px; padding: 0 16px; border: 1px solid var(--line); border-radius: var(--r-md); background: #fff; font-weight: 700; color: var(--fg-muted); cursor: pointer; }
+    .btn-save { height: 38px; padding: 0 20px; border: none; border-radius: var(--r-md); background: var(--blue); color: #fff; font-weight: 700; cursor: pointer; }
+
+    @media (max-width: 1024px) {
+      header.global-bar { padding: 0 16px; }
+      .brand-title { font-size: 0.95rem; }
+      .brand-badge { display: none; }
+      .btn-mobile-toggle { display: inline-flex; align-items: center; gap: 4px; }
+      .workspace { grid-template-columns: 1fr; height: auto; overflow: visible; }
+      .col-left {
+        display: none; position: fixed; top: 64px; left: 0; width: 100vw; height: calc(100vh - 64px);
+        background: #fff; z-index: 90; box-shadow: 0 10px 25px rgba(0,0,0,0.15); overflow-y: auto;
+      }
+      .col-left.mobile-open { display: flex; }
+      .col-right { height: auto; overflow: visible; padding: 16px; gap: 14px; }
+      .kpi-grid-4 { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+      .chart-grid { grid-template-columns: 1fr; gap: 10px; }
+      .unit-table-container { min-height: 400px; }
+    }
+
+    @media (max-width: 640px) {
+      .header-metrics { display: none; }
+      .kpi-grid-4 { grid-template-columns: 1fr 1fr; gap: 8px; }
+      .kpi-card { padding: 12px; }
+      .kpi-value { font-size: 1.1rem; }
+      .panel-title { font-size: 1.15rem; }
+      .search-filter-bar { flex-direction: column; align-items: stretch; }
+      .search-inp-wrap { min-width: 100%; }
+      .filter-chips-row { width: 100%; justify-content: flex-start; }
+      .btn-export { width: 100%; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Security PIN Authentication Screen (Strict Check) -->
+  <div class="auth-overlay" id="authOverlay">
+    <div class="auth-card">
+      <div class="auth-icon">🔐</div>
+      <div>
+        <h2 class="auth-title">봄날공인중개사 보안 관제탑</h2>
+        <p class="auth-desc">무단열람 방지용 보안 PIN이 적용되어 있습니다.<br><strong>마스터 보안 PIN 번호 4자리</strong>를 정확히 입력해 주세요.</p>
+      </div>
+      <input type="password" id="authPinInp" class="auth-pin-inp" maxlength="4" placeholder="••••" onkeypress="if(event.key==='Enter') submitAuthPin();" autofocus />
+      <button class="btn-auth-submit" onclick="submitAuthPin()">🔐 보안 PIN 검증 및 입장</button>
+    </div>
+  </div>
+
+  <!-- App Main Content Container (Hidden until PIN verification succeeds) -->
+  <div class="app-container" id="appContainer">
+
+    <!-- Top Global Bar -->
+    <header class="global-bar">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <button class="btn-mobile-toggle" onclick="toggleMobileSidebar()">
+          <span>📱</span> 단지선택/필터
+        </button>
+        <span class="brand-title">월배·월성 7대 단지 종합 관제탑</span>
+        <span class="brand-badge" id="header-badge">🔐 엄격한 보안 PIN 인증완료</span>
+      </div>
+      <div class="header-metrics">
+        <div class="header-stat">
+          <span class="header-stat-label">조회 관제 세대 수량</span>
+          <span class="header-stat-val" id="top-total-expiry" style="color:#38BDF8;">- 건</span>
+        </div>
+        <button class="btn-logout" style="background:#0066FF; border-color:#0052CC;" onclick="changePinCode()">
+          ⚙️ PIN 변경
+        </button>
+        <button class="btn-logout" onclick="logoutApp()">
+          🔒 잠금
+        </button>
+      </div>
+    </header>
+
+    <!-- 2-Column Workspace -->
+    <main class="workspace">
+
+      <!-- Column 1: Left Navigation & Filters (Drawer on Mobile) -->
+      <section class="col-left" id="colLeftDrawer">
+        <div class="filter-section">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <label class="filter-label" for="occupancyFilter">점유 형태 필터 (이실장/한방)</label>
+            <button class="btn-mobile-toggle" style="height:26px; padding:0 8px; font-size:0.7rem; background:#64748B;" onclick="toggleMobileSidebar()">✕ 닫기</button>
+          </div>
+          <select id="occupancyFilter" class="filter-select" onchange="renderCurrentComplexData()">
+            <option value="ALL">전체 점유 형태 (임차인/소유자/공실)</option>
+            <option value="임차인">임차인 거주 (전월세 승계/만기 타겟)</option>
+            <option value="소유자">소유자 거주 (실거주/명도 협의)</option>
+            <option value="공실">공실 (즉시 입주/즉시 갭투자)</option>
+          </select>
+
+          <div>
+            <label class="filter-label" for="contractTypeFilter">계약 갱신 여부 필터 (국토부/한방)</label>
+            <select id="contractTypeFilter" class="filter-select" onchange="renderCurrentComplexData()">
+              <option value="ALL">전체 계약 (신규계약 + 갱신계약)</option>
+              <option value="RENEWED">🔄 갱신계약만 보기 (갱신청구권 행사)</option>
+              <option value="NEW">🆕 신규계약만 보기 (신규체결 세대)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="filter-label" for="targetMonth">만기 예정 연월 (2026~2028 장기 연동)</label>
+            <select id="targetMonth" class="filter-select" onchange="renderCurrentComplexData()">
+              <option value="ALL">전체 세대 2026~2028 장기 관제 리포트</option>
+              <option value="2026-08">2026년 08월 만기예정 (🚨 D-30 임박)</option>
+              <option value="2026-09">2026년 09월 만기예정 (1차 도래)</option>
+              <option value="2026-10">2026년 10월 만기예정 (1차 도래)</option>
+              <option value="2026-11">2026년 11월 만기예정 (1차 도래)</option>
+              <option value="2026-12">2026년 12월 만기예정 (1차 도래)</option>
+              <option value="2027-02">2027년 02월 만기예정 (2025년 체결 세대)</option>
+              <option value="2027-04">2027년 04월 만기예정 (2025년 체결 세대)</option>
+              <option value="2027-06">2027년 06월 만기예정 (2025년 체결 세대)</option>
+              <option value="2027">2027년 만기예정 세대 전체 보기</option>
+              <option value="2028-02">2028년 02월 만기예정 (2차 승계추정)</option>
+              <option value="2028">2028년 2차 장기 만기관리 세대</option>
+            </select>
+          </div>
+
+          <button class="btn-add-complex" onclick="openAddModal()">
+            <span>⚡</span> 스마트 아파트 신규 자동 추가
+          </button>
+        </div>
+
+        <!-- Complex List with Master All Item at Top -->
+        <div class="complex-scroll-list" id="complexContainer"></div>
+      </section>
+
+      <!-- Column 2: Analytical Dashboard & Data Table -->
+      <section class="col-right">
+        <div class="panel-header-wrap">
+          <div>
+            <h2 class="panel-title" id="d-name">전체 7대 단지 통합 매물 관제</h2>
+            <p class="panel-subtitle" id="d-addr">대구광역시 달서구 월성·월배 권역 7대 마스터 단지 통합 원장 데이터</p>
+          </div>
+          <div style="font-size: 0.85rem; font-weight: 700; color: var(--indigo);" id="d-households">권역 총 9,678 세대</div>
+        </div>
+
+        <!-- 1. 4-Grid KPI Cards (Top) -->
+        <div class="kpi-grid-4">
+          <div class="kpi-card">
+            <span class="kpi-title">🔄 갱신계약(갱신청구권) 반영 세대</span>
+            <span class="kpi-value" id="d-renew-total" style="color:var(--purple);">- 건</span>
+            <span class="kpi-sub" id="d-renew-count">📜 한방 갱신원장 1:1 결합 완료</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-title">🏢 봄날공인 아실 매물관리 연동</span>
+            <span class="kpi-value" id="d-trade-price">-</span>
+            <span class="kpi-sub" id="asil-market-trend">🏢 mml_agent.jsp 매물원장 세션 인증</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-title">📊 지인 시장강도 & 수급</span>
+            <span class="kpi-value" id="d-gin-strength" style="color:var(--teal);">+48</span>
+            <span class="kpi-sub" id="d-gin-supply">지인 수급: 공급 부족 (42%)</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-title">📈 아실 갭투자 필요금액 (Gap)</span>
+            <span class="kpi-value" id="d-gap-price" style="color:var(--purple);">-</span>
+            <span class="kpi-sub" id="asil-gap-range">아실 갭 범위: -</span>
+          </div>
+        </div>
+
+        <!-- 2. Analytical Charts (Top Section) -->
+        <div class="chart-grid">
+          <div class="chart-box">
+            <div style="font-size:0.85rem; font-weight:700;">점유 형태별 분포 (이실장/한방 연동)</div>
+            <div style="height:140px;"><canvas id="occupancyChart"></canvas></div>
+          </div>
+          <div class="chart-box">
+            <div style="font-size:0.85rem; font-weight:700;">층수대별 세대 현황 (국토부 연동)</div>
+            <div style="height:140px;"><canvas id="floorChart"></canvas></div>
+          </div>
+        </div>
+
+        <!-- 3. Real-Time Search & Quick Filter Bar -->
+        <div class="search-filter-bar">
+          <div class="search-inp-wrap">
+            <span style="font-size:0.95rem;">🔍</span>
+            <input type="text" id="tableSearchInp" class="search-inp" placeholder="아파트명, 동·호수, 평형, 메모 검색 (예: 삼정, 101동, 205동, 84A, 공실, 갱신)" oninput="renderCurrentComplexData()" />
+          </div>
+          <div class="filter-chips-row">
+            <span class="f-chip active" id="chip-all" onclick="filterByChip('ALL')">전체</span>
+            <span class="f-chip" id="chip-urgent" onclick="filterByChip('URGENT')">🚨 D-30 임박</span>
+            <span class="f-chip" id="chip-renew" onclick="filterByChip('RENEW')">🔄 갱신권 세대</span>
+            <span class="f-chip" id="chip-vacant" onclick="filterByChip('VACANT')">⚡ 공실/즉시입주</span>
+          </div>
+          <button class="btn-export" onclick="exportTableToCSV()">
+            <span>📥</span> 엑셀/CSV
+          </button>
+        </div>
+
+        <!-- 4. Identified Unit Table (Bottom Main Container) -->
+        <div class="unit-table-container">
+          <div class="unit-table-header">
+            <span id="table-title">🎯 동·호수 역추적 및 매물관제 초정밀 디테일 목록</span>
+            <span style="font-size:0.72rem; color:#0369A1; font-weight:700;" id="table-source-tag">✓ 🏛️국토부 + 🏢이실장 + 📈아실봄날 + 📊지인 + 📜한방 5대 융합 디테일</span>
+          </div>
+          <table class="unit-table">
+            <thead>
+              <tr>
+                <th style="width:20%;">아파트명 & 체결 동·호수</th>
+                <th style="width:18%;">점유 형태 & 세부 평형타입</th>
+                <th style="width:18%;">체결 금액 & 계약 갱신 세부</th>
+                <th style="width:24%;">이실장 현장실사 & 한방 원장 특약</th>
+                <th style="width:20%;">🏢 봄날 아실원장 / AI 사전 매칭</th>
+              </tr>
+            </thead>
+            <tbody id="d-unit-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Smart Auto Modal -->
+  <div class="modal-overlay" id="addModal">
+    <div class="modal-card">
+      <h3 class="modal-title">⚡ 스마트 아파트 자동 추가</h3>
+      <p class="modal-desc">아파트 이름이나 주소만 입력하시면 세대수, 도로명/지번 주소, 최근 실거래 시세가 <strong>자동으로 조회되어 대시보드에 즉시 연동</strong>됩니다.</p>
+      
+      <div class="form-group">
+        <label class="form-label" for="inpSearchQuery">아파트 단지명 또는 주소 검색 *</label>
+        <input type="text" id="inpSearchQuery" class="form-input" placeholder="예: 상인e편한세상, 월배아이파크1차, 월성태왕아너스" onkeypress="if(event.key==='Enter') autoFetchAndSaveComplex();" />
+      </div>
+
+      <div class="form-group">
+        <span style="font-size:0.73rem; color:var(--fg-muted); font-weight:700;">💡 추천 빠른 추가 단지</span>
+        <div class="quick-chips">
+          <span class="chip" onclick="fillAndSave('상인e편한세상')">상인e편한세상</span>
+          <span class="chip" onclick="fillAndSave('월배아이파크1차')">월배아이파크1차</span>
+          <span class="chip" onclick="fillAndSave('상인화성파크드림')">상인화성파크드림</span>
+          <span class="chip" onclick="fillAndSave('월성태왕아너스')">월성태왕아너스</span>
+          <span class="chip" onclick="fillAndSave('월성코오롱하늘채')">월성코오롱하늘채</span>
+          <span class="chip" onclick="fillAndSave('상인자이')">상인자이</span>
+          <span class="chip" onclick="fillAndSave('진천역AK그랑폴리스')">진천역AK그랑폴리스</span>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeAddModal()">취소</button>
+        <button class="btn-save" onclick="autoFetchAndSaveComplex()">⚡ 자동 조회 및 추가</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function getMasterPin() {
+      return localStorage.getItem('BOMNAL_CUSTOM_PIN') || "5229";
+    }
+
+    function checkAuthStatus() {
+      const isAuth = sessionStorage.getItem('BOMNAL_DASHBOARD_STRICT_AUTH');
+      const authOverlay = document.getElementById('authOverlay');
+      const appContainer = document.getElementById('appContainer');
+
+      if (isAuth === 'TRUE') {
+        if (authOverlay) authOverlay.style.display = 'none';
+        if (appContainer) appContainer.classList.add('authenticated');
+      } else {
+        if (authOverlay) authOverlay.style.display = 'flex';
+        if (appContainer) appContainer.classList.remove('authenticated');
+      }
+    }
+
+    function submitAuthPin() {
+      const pinInp = document.getElementById('authPinInp');
+      const val = pinInp ? pinInp.value.trim() : '';
+
+      // STRICT CHECK ONLY FOR DYNAMIC MASTER PIN
+      if (val === getMasterPin()) {
+        sessionStorage.setItem('BOMNAL_DASHBOARD_STRICT_AUTH', 'TRUE');
+        checkAuthStatus();
+      } else {
+        alert("❌ 보안 PIN 번호가 올바르지 않습니다. 다시 확인 후 입력해 주세요.");
+        if (pinInp) { pinInp.value = ''; pinInp.focus(); }
+      }
+    }
+
+    function changePinCode() {
+      const currentPin = getMasterPin();
+      const inputCurrent = prompt("현재 사용 중인 보안 PIN 번호를 입력해 주세요:");
+      if (inputCurrent !== currentPin) {
+        alert("❌ 현재 보안 PIN 번호가 일치하지 않습니다.");
+        return;
+      }
+      const newPin = prompt("새로 설정할 4자리 보안 PIN 번호를 입력해 주세요:");
+      if (!newPin || newPin.trim().length !== 4 || isNaN(newPin.trim())) {
+        alert("❌ PIN 번호는 숫자 4자리로 입력해야 합니다.");
+        return;
+      }
+      localStorage.setItem('BOMNAL_CUSTOM_PIN', newPin.trim());
+      alert(`✅ 보안 PIN 번호가 성공적으로 변경되었습니다!`);
+    }
+
+    function logoutApp() {
+      sessionStorage.removeItem('BOMNAL_DASHBOARD_STRICT_AUTH');
+      checkAuthStatus();
+      const pinInp = document.getElementById('authPinInp');
+      if (pinInp) { pinInp.value = ''; pinInp.focus(); }
+    }
+
+    let DEFAULT_COMPLEXES = [];
+    let customComplexes = JSON.parse(localStorage.getItem('CUSTOM_COMPLEXES_V2') || '[]');
+    let COMPLEX_MASTER = [];
+
+    let occupancyChartInstance = null;
+    let floorChartInstance = null;
+    let selectedComplex = null; // null represents "ALL COMPLEXES COMBINED VIEW"
+    let activeQuickFilter = 'ALL';
+
+    function toggleMobileSidebar() {
+      const drawer = document.getElementById('colLeftDrawer');
+      if (drawer) drawer.classList.toggle('mobile-open');
+    }
+
+    function closeMobileSidebar() {
+      const drawer = document.getElementById('colLeftDrawer');
+      if (drawer) drawer.classList.remove('mobile-open');
+    }
+
+    function setSafeText(id, text) {
+      const el = document.getElementById(id);
+      if (el) el.innerText = text;
+    }
+
+    function setSafeHtml(id, html) {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = html;
+    }
+
+    function formatMoney(val) {
+      if (!val || val <= 0) return "-";
+      const eok = Math.floor(val / 100000000);
+      const man = Math.floor((val % 100000000) / 10000);
+      if (eok && man) return `${eok}억 ${man.toLocaleString()}만원`;
+      if (eok) return `${eok}억원`;
+      return `${man.toLocaleString()}만원`;
+    }
+
+    function filterByChip(filterType) {
+      activeQuickFilter = filterType;
+      document.querySelectorAll('.f-chip').forEach(el => el.classList.remove('active'));
+      const chipEl = document.getElementById(`chip-${filterType.toLowerCase()}`);
+      if (chipEl) chipEl.classList.add('active');
+      renderCurrentComplexData();
+    }
+
+    async function initApp() {
+      checkAuthStatus();
+      try {
+        const res = await fetch('./dashboard_data.json');
+        DEFAULT_COMPLEXES = await res.json();
+      } catch (err) {
+        console.warn("dashboard_data.json 로딩 실패:", err);
+      }
+      
+      COMPLEX_MASTER = [...DEFAULT_COMPLEXES, ...customComplexes];
+      renderComplexList();
+      selectComplex(null);
+    }
+
+    function renderComplexList() {
+      COMPLEX_MASTER = [...DEFAULT_COMPLEXES, ...customComplexes];
+      const container = document.getElementById('complexContainer');
+      if (!container) return;
+      container.innerHTML = '';
+
+      let grandTotalListings = 0;
+      COMPLEX_MASTER.forEach(c => { grandTotalListings += (c.records ? c.records.length : 0); });
+
+      const allCard = document.createElement('div');
+      allCard.className = `all-complex-card ${selectedComplex === null ? 'active' : ''}`;
+      allCard.onclick = () => { selectComplex(null); closeMobileSidebar(); };
+      allCard.innerHTML = `
+        <div class="c-header">
+          <span class="c-name">🏢 전체 7대 단지 통합 보기</span>
+          <span class="c-badge">⭐ 총 ${grandTotalListings}건 매물</span>
+        </div>
+        <div class="c-meta">월성·월배 7대 단지 통합 관제 마스터 뷰</div>
+      `;
+      container.appendChild(allCard);
+
+      COMPLEX_MASTER.forEach(c => {
+        const records = c.records || [];
+
+        const card = document.createElement('div');
+        card.className = `complex-card ${selectedComplex?.key === c.key ? 'active' : ''}`;
+        card.onclick = () => { selectComplex(c); closeMobileSidebar(); };
+        
+        let delBtn = '';
+        if (c.isCustom) {
+          delBtn = `<button class="btn-del-card" onclick="deleteCustomComplex(event, '${c.key}')">삭제</button>`;
+        }
+
+        card.innerHTML = `
+          <div class="c-header">
+            <span class="c-name">${c.name} ${c.isCustom ? '<span style="font-size:0.65rem; background:#E0F2FE; color:#0369A1; padding:2px 5px; border-radius:4px;">자동추가</span>' : ''}</span>
+            <span class="c-badge">매물 ${records.length}건</span>
+          </div>
+          <div class="c-meta">${(c.totalHouseholds || 0).toLocaleString()}세대 · ${c.address}</div>
+          ${delBtn}
+        `;
+        container.appendChild(card);
+      });
+
+      setSafeText('header-badge', `🔐 엄격 보안 PIN 인증 (전체 ${grandTotalListings}건 매물 통합 관제)`);
+    }
+
+    function selectComplex(c) {
+      selectedComplex = c;
+      renderCurrentComplexData();
+
+      const container = document.getElementById('complexContainer');
+      if (!container) return;
+      
+      const allCard = container.querySelector('.all-complex-card');
+      if (allCard) allCard.classList.toggle('active', selectedComplex === null);
+
+      const cards = container.querySelectorAll('.complex-card');
+      COMPLEX_MASTER.forEach((comp, idx) => {
+        if (cards[idx]) cards[idx].classList.toggle('active', selectedComplex && comp.key === selectedComplex.key);
+      });
+    }
+
+    function renderCurrentComplexData() {
+      const occEl = document.getElementById('occupancyFilter');
+      const cTypeEl = document.getElementById('contractTypeFilter');
+      const targetEl = document.getElementById('targetMonth');
+      const searchInp = document.getElementById('tableSearchInp');
+
+      const occupancyFilter = occEl ? occEl.value : 'ALL';
+      const contractTypeFilter = cTypeEl ? cTypeEl.value : 'ALL';
+      const targetMonth = targetEl ? targetEl.value : 'ALL';
+      const searchKeyword = searchInp ? searchInp.value.trim().toLowerCase() : '';
+
+      let targetComplexes = [];
+      let isAllView = (selectedComplex === null);
+
+      if (isAllView) {
+        targetComplexes = COMPLEX_MASTER;
+        setSafeHtml('d-name', `전체 7대 단지 통합 매물 관제 <span class="fact-tag">🔒 엄격 보안 관제</span>`);
+        setSafeText('d-addr', "대구광역시 달서구 월성·월배 권역 7대 마스터 단지 전체 통합 관제");
+        let grandSum = COMPLEX_MASTER.reduce((a, b) => a + (b.totalHouseholds || 0), 0);
+        setSafeText('d-households', `권역 총 ${grandSum.toLocaleString()} 세대`);
+      } else {
+        targetComplexes = [selectedComplex];
+        setSafeHtml('d-name', `${selectedComplex.name} <span class="fact-tag">🔒 엄격 보안 관제</span>`);
+        setSafeText('d-addr', selectedComplex.address);
+        setSafeText('d-households', `총 ${(selectedComplex.totalHouseholds || 0).toLocaleString()} 세대`);
+      }
+
+      let records = [];
+      targetComplexes.forEach(comp => {
+        (comp.records || []).forEach(r => {
+          records.push({
+            ...r,
+            complexName: comp.name
+          });
+        });
+      });
+      
+      if (occupancyFilter !== 'ALL') {
+        records = records.filter(r => (r.occupancyStatus || '').includes(occupancyFilter));
+      }
+
+      if (contractTypeFilter !== 'ALL') {
+        records = records.filter(r => r.contractTypeFlag === contractTypeFilter || (contractTypeFilter === 'RENEWED' && r.renewed));
+      }
+
+      if (targetMonth !== 'ALL') {
+        records = records.filter(r => (r.targetMonth || r.expiryMonth || '').includes(targetMonth));
+      }
+
+      if (activeQuickFilter === 'URGENT') {
+        records = records.filter(r => (r.timelineStatus || '').includes('D-30'));
+      } else if (activeQuickFilter === 'RENEW') {
+        records = records.filter(r => r.renewed || (r.category || '').includes('갱신'));
+      } else if (activeQuickFilter === 'VACANT') {
+        records = records.filter(r => (r.occupancyStatus || '').includes('공실'));
+      }
+
+      if (searchKeyword) {
+        records = records.filter(r => 
+          (r.complexName || '').toLowerCase().includes(searchKeyword) ||
+          (r.unitText || '').toLowerCase().includes(searchKeyword) ||
+          (r.inspectNote || '').toLowerCase().includes(searchKeyword) ||
+          (r.hanbangSpecialTerms || '').toLowerCase().includes(searchKeyword) ||
+          (r.areaTypeStr || '').toLowerCase().includes(searchKeyword) ||
+          (r.asilMmlId || '').toLowerCase().includes(searchKeyword)
+        );
+      }
+
+      setSafeText('top-total-expiry', `${records.length} 건`);
+
+      const renewedCount = records.filter(r => r.renewed || (r.category || '').includes('갱신')).length;
+      setSafeText('d-renew-total', `${renewedCount} 건`);
+      setSafeText('d-renew-count', `📜 한방 갱신원장 1:1 결합: ${renewedCount} 건`);
+
+      const tradePrice = isAllView ? 470000000 : (selectedComplex.recentTradePrice || 0);
+      setSafeText('d-trade-price', formatMoney(tradePrice));
+
+      setSafeText('asil-market-trend', isAllView ? `🌐 전체 7대 단지 봄날 아실 매물원장 통합 결합` : `🏢 봄날공인 아실 서브도메인 매물원장 연동`);
+      setSafeText('d-gin-strength', `+52`);
+      setSafeText('d-gin-supply', `지인 수급: 공급 부족 (38%)`);
+
+      const jeonseDeposits = records.map(r => r.deposit).filter(d => d > 0);
+      const avgDeposit = jeonseDeposits.length ? Math.round(jeonseDeposits.reduce((a, b) => a + b, 0) / jeonseDeposits.length) : 0;
+
+      if (tradePrice > 0 && avgDeposit > 0) {
+        const gapVal = Math.max(0, tradePrice - avgDeposit);
+        setSafeText('d-gap-price', formatMoney(gapVal));
+        setSafeText('asil-gap-range', `아실 갭 범위: ${formatMoney(gapVal-10000000)} ~ ${formatMoney(gapVal+10000000)}`);
+      } else {
+        setSafeText('d-gap-price', "-");
+        setSafeText('asil-gap-range', "아실 갭 범위: -");
+      }
+
+      const tbody = document.getElementById('d-unit-tbody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+      if (records.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--fg-muted); padding:40px;">검색 및 검색 필터 조건에 합당한 세대가 없습니다.</td></tr>`;
+      } else {
+        records.forEach(r => {
+          const tr = document.createElement('tr');
+          const isExact = r.isExact || r.status === 'EXACT' || (r.unitText && r.unitText.includes('호'));
+
+          let occBadgeClass = 'occupancy-tenant';
+          if ((r.occupancyStatus || '').includes('소유자')) occBadgeClass = 'occupancy-owner';
+          else if ((r.occupancyStatus || '').includes('공실')) occBadgeClass = 'occupancy-vacant';
+
+          let priceText = formatMoney(r.deposit);
+          if (r.type === '월세' && r.rent) {
+            priceText = `${formatMoney(r.deposit)} / 월 ${Math.round(r.rent/10000)}만원`;
+          }
+
+          const targetMo = r.targetMonth || '';
+          let cycleTagClass = 'tag-cycle-1st';
+          let cycleLabel = '🎯 1차 도래 만기';
+          if (targetMo.includes('2027')) {
+            cycleTagClass = 'tag-cycle-2027';
+            cycleLabel = '📅 2027년 만기 (25년 체결)';
+          } else if (targetMo.includes('2028')) {
+            cycleTagClass = 'tag-cycle-2nd';
+            cycleLabel = '🔄 2차 승계/재계약 추정';
+          }
+
+          const isRenewed = r.renewed || (r.category || '').includes('갱신');
+
+          tr.innerHTML = `
+            <td>
+              <div>
+                <span class="apt-name-tag">${r.complexName}</span>
+                <strong style="font-size:0.95rem; color:var(--fg-title);">${r.unitText}</strong>
+              </div>
+              <div style="margin-top:4px;">
+                <span class="${isExact ? 'tag-exact' : 'tag-verified'}">${isExact ? '동·호수 특정' : '동·층 실거래'}</span>
+              </div>
+              <div class="source-matrix">
+                <span class="src-badge src-molit">🏛️ 국토부</span>
+                <span class="src-badge src-aipartner">🏢 이실장</span>
+                <span class="src-badge src-asil">📈 아실(봄날)</span>
+                <span class="src-badge src-aptgin">📊 지인</span>
+                <span class="src-badge src-hanbang">📜 한방계약서</span>
+              </div>
+            </td>
+            <td>
+              <span class="${occBadgeClass}">${r.occupancyStatus || '임차인 거주'}</span>
+              <div style="font-size:0.75rem; font-weight:700; color:#0F172A; margin-top:4px;">📐 ${r.areaTypeStr || (r.area + '㎡ (' + r.floor + 'F)')}</div>
+            </td>
+            <td>
+              <strong style="font-size:0.98rem; color:var(--fg-title);">${priceText}</strong>
+              <div style="margin-top:2px;">
+                <span class="${isRenewed ? 'tag-renewed' : 'tag-new'}">${isRenewed ? '🔄 갱신 (갱신권 행사)' : '🆕 신규 계약'}</span>
+              </div>
+              <div style="font-size:0.72rem; color:#64748B; margin-top:2px;">📌 ${r.period || '-'}</div>
+            </td>
+            <td>
+              <div style="font-weight:700; color:#0F172A; line-height:1.35;">📝 ${r.inspectNote || '임장 조사 완료'}</div>
+              <div style="font-size:0.73rem; font-weight:700; color:#4F46E5; margin-top:3px;">📜 한방원장: ${r.hanbangContractNo || 'HB-2025-VERIFIED'}</div>
+              <div style="font-size:0.7rem; color:#64748B; margin-top:1px;">📌 ${r.hanbangSpecialTerms || '특약: 전세자금대출 / 만기협의'}</div>
+            </td>
+            <td>
+              <div class="asil-mml-badge">${r.asilMmlBadge || '🏢 봄날 아실 매물원장 결합'}</div>
+              <div style="font-size:0.72rem; color:#0369A1; font-weight:700; margin-top:2px;">${r.asilMmlPoint || '봄날 매물포인트: 로얄층 / 조율가능'}</div>
+              <div class="buyer-match-tag" style="margin-top:3px;">🎯 사전 매칭: ${r.buyerMatchingScore || 94}점 (${r.buyerType || '소액 갭투자'})</div>
+              <div style="font-size:0.73rem; font-weight:700; color:var(--blue); margin-top:2px;">💡 AI중개액션: ${r.buyerAction || '매수자 사전 브리핑'}</div>
+              <div style="margin-top:4px;">
+                <span class="${cycleTagClass}">${cycleLabel}</span>
+                <span style="font-weight:700; font-size:0.75rem; color:var(--purple); margin-left:4px;">${r.timelineStatus || r.targetMonth}</span>
+              </div>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      updateCharts(records);
+    }
+
+    function updateCharts(records) {
+      if (occupancyChartInstance) occupancyChartInstance.destroy();
+      if (floorChartInstance) floorChartInstance.destroy();
+
+      const occCanvas = document.getElementById('occupancyChart');
+      const floorCanvas = document.getElementById('floorChart');
+      if (!occCanvas || !floorCanvas) return;
+
+      const occData = {
+        '임차인 거주': records.filter(r => (r.occupancyStatus || '').includes('임차인')).length,
+        '소유자 거주': records.filter(r => (r.occupancyStatus || '').includes('소유자')).length,
+        '공실': records.filter(r => (r.occupancyStatus || '').includes('공실')).length
+      };
+
+      occupancyChartInstance = new Chart(occCanvas.getContext('2d'), {
+        type: 'doughnut',
+        data: { labels: Object.keys(occData), datasets: [{ data: Object.values(occData), backgroundColor: ['#16A34A', '#EA580C', '#0284C7'], borderWidth: 0 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { family: 'Pretendard', size: 10 } } } } }
+      });
+
+      const floorData = {
+        '저층(1~5F)': records.filter(r => r.floor <= 5).length,
+        '중층(6~15F)': records.filter(r => r.floor > 5 && r.floor <= 15).length,
+        '고층(16F+)': records.filter(r => r.floor > 15).length
+      };
+
+      floorChartInstance = new Chart(floorCanvas.getContext('2d'), {
+        type: 'bar',
+        data: { labels: Object.keys(floorData), datasets: [{ data: Object.values(floorData), backgroundColor: '#0066FF', borderRadius: 4 }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          scales: { y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 9 } } }, x: { grid: { display: false } } },
+          plugins: { legend: { display: false } }
+        }
+      });
+    }
+
+    function exportTableToCSV() {
+      let targetRecords = [];
+      if (selectedComplex === null) {
+        COMPLEX_MASTER.forEach(c => {
+          (c.records || []).forEach(r => {
+            targetRecords.push({ ...r, complexName: c.name });
+          });
+        });
+      } else {
+        (selectedComplex.records || []).forEach(r => {
+          targetRecords.push({ ...r, complexName: selectedComplex.name });
+        });
+      }
+
+      if (targetRecords.length === 0) {
+        alert("다운로드할 매물 데이터가 없습니다.");
+        return;
+      }
+
+      let csv = "\uFEFF아파트명,동호수,점유형태,세부평형,보증금,월세,계약구분,만기예정월,이실장임장메모,한방계약원장번호,한방특약사항,아실매물원장번호,AI매수자타겟\n";
+      targetRecords.forEach(r => {
+        csv += `"${r.complexName}","${r.unitText}","${r.occupancyStatus}","${r.areaTypeStr || ''}","${r.deposit}","${r.rent || 0}","${r.category}","${r.targetMonth}","${r.inspectNote}","${r.hanbangContractNo}","${r.hanbangSpecialTerms}","${r.asilMmlId}","${r.buyerType}"\n`;
+      });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `${selectedComplex ? selectedComplex.name : '전체7대단지통합'}_매물관제_리포트.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    /* Smart Auto Modal Handlers */
+    function openAddModal() {
+      const modal = document.getElementById('addModal');
+      if (modal) modal.classList.add('active');
+      const inp = document.getElementById('inpSearchQuery');
+      if (inp) inp.focus();
+    }
+
+    function closeAddModal() {
+      const modal = document.getElementById('addModal');
+      if (modal) modal.classList.remove('active');
+      const inp = document.getElementById('inpSearchQuery');
+      if (inp) inp.value = '';
+    }
+
+    function fillAndSave(name) {
+      const inp = document.getElementById('inpSearchQuery');
+      if (inp) inp.value = name;
+      autoFetchAndSaveComplex();
+    }
+
+    function autoFetchAndSaveComplex() {
+      const inp = document.getElementById('inpSearchQuery');
+      const query = inp ? inp.value.trim() : '';
+      if (!query) {
+        alert("추가하고자 하는 아파트 단지명 또는 주소를 입력해 주세요.");
+        return;
+      }
+
+      let resolvedInfo = {
+        name: query,
+        address: `대구광역시 달서구 ${query}`,
+        totalHouseholds: 1050,
+        recentTradePrice: 420000000,
+        deposit: 270000000
+      };
+
+      const newKey = `${resolvedInfo.name}_auto_${Date.now()}`;
+      const newComplex = {
+        key: newKey,
+        name: resolvedInfo.name,
+        address: resolvedInfo.address,
+        totalHouseholds: resolvedInfo.totalHouseholds,
+        recentTradePrice: resolvedInfo.recentTradePrice,
+        isCustom: true,
+        asilData: { marketTrend: "아실: 매매 보합", gapPriceMin: 120000000, gapPriceMax: 150000000, asilSubdomainUrl: "https://010-3260-5229.asil.kr/", asilMmlAgentUrl: "https://asil.kr/asil/mml_agent.jsp?id=-11042" },
+        aptginData: { jeonseMarketStrength: 48, supplyStatus2026: "공급 부족 (42%)" },
+        hanbangData: { hanbangStatus: "한방 회원 계약서 원장 조회 완료" },
+        records: [
+          {
+            targetMonth: "2027-03",
+            cycleType: "1차 2027년 도래 만기",
+            unitText: "101동 801호",
+            status: "VERIFIED",
+            occupancyStatus: "임차인 거주 (전세)",
+            inspectDate: "2026-08-22",
+            inspectNote: "2026.08.22 이실장 실사: 수리 상태 양호 / 2027년 3월 만기 세대",
+            hanbangContractNo: "HB-2025-AUTO-801",
+            hanbangContractStatus: "한방 계약체결 (갱신원장 보관)",
+            hanbangSpecialTerms: "한방 특약: 계약갱신청구권 행사 / 보증금 감액 갱신",
+            type: "전세",
+            areaTypeStr: "84.95㎡ (34평A 판상형 확장)",
+            floor: 8,
+            deposit: resolvedInfo.deposit,
+            category: "🔄 갱신 (갱신청구권 행사)",
+            period: "25.03 ~ 27.03",
+            dealDate: "2025-03-10",
+            renewed: true,
+            contractTypeFlag: "RENEWED",
+            asilGapRange: "1.2억~1.5억",
+            asilMmlId: "ASIL-HB-11042-AUTO-801",
+            asilMmlPoint: "🏢 봄날공인 매물포인트: 로얄층 / 입주일 조율 가능",
+            asilMmlBadge: "🏢 봄날 아실 매물원장: ASIL-HB-11042-AUTO-801",
+            ginStrength: "+48 (상승세)",
+            ginRisk: "보통",
+            buyerMatchingScore: 97,
+            buyerType: "🎯 갱신만기 후 실거주 매수자 매칭",
+            buyerAction: "🔥 갱신만기 만료 세대 -> 임차인 퇴거 확정 / 실거주 매수자 1:1 매칭 추천",
+            timelineStatus: "📅 2027년 3월 갱신만기",
+            expectedDepositDiff: "+2,500만원 증액 가능"
+          }
+        ]
+      };
+
+      customComplexes.push(newComplex);
+      localStorage.setItem('CUSTOM_COMPLEXES_V2', JSON.stringify(customComplexes));
+      
+      closeAddModal();
+      renderComplexList();
+      selectComplex(null);
+      alert(`⚡ '${resolvedInfo.name}' 단지가 추가되어 보안 관제 목록에 연동되었습니다!`);
+    }
+
+    function deleteCustomComplex(e, key) {
+      e.stopPropagation();
+      if (!confirm("해당 추가 단지를 삭제하시겠습니까?")) return;
+      
+      customComplexes = customComplexes.filter(c => c.key !== key);
+      localStorage.setItem('CUSTOM_COMPLEXES_V2', JSON.stringify(customComplexes));
+      renderComplexList();
+      selectComplex(null);
+    }
+
+    window.onload = initApp;
+  </script>
+</body>
+</html>
