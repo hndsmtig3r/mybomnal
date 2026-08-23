@@ -821,8 +821,9 @@
 
       const floorData = {
         '저층(1~5F)': records.filter(r => r.floor <= 5).length,
-        '중층(6~15F)': records.filter(r => r.floor > 5 && r.floor <= 15).length,
-        '고층(16F+)': records.filter(r => r.floor > 15).length
+        '중층(6~20F)': records.filter(r => r.floor > 5 && r.floor <= 20).length,
+        '고층(21~35F)': records.filter(r => r.floor > 20 && r.floor <= 35).length,
+        '초고층(36~48F)': records.filter(r => r.floor > 35).length
       };
 
       floorChartInstance = new Chart(floorCanvas.getContext('2d'), {
