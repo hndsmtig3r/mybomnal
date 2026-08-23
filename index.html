@@ -411,40 +411,10 @@
       </section>
 
     </main>
-  </div>
-
-  <!-- Smart Auto Modal -->
-  <div class="modal-overlay" id="addModal">
-    <div class="modal-card">
-      <h3 class="modal-title">⚡ 스마트 아파트 자동 추가</h3>
-      <p class="modal-desc">아파트 이름이나 주소만 입력하시면 세대수, 도로명/지번 주소, 최근 실거래 시세가 <strong>자동으로 조회되어 대시보드에 즉시 연동</strong>됩니다.</p>
-      
-      <div class="form-group">
-        <label class="form-label" for="inpSearchQuery">아파트 단지명 또는 주소 검색 *</label>
-        <input type="text" id="inpSearchQuery" class="form-input" placeholder="예: 상인e편한세상, 월배아이파크1차, 월성태왕아너스" onkeypress="if(event.key==='Enter') autoFetchAndSaveComplex();" />
-      </div>
-
-      <div class="form-group">
-        <span style="font-size:0.73rem; color:var(--fg-muted); font-weight:700;">💡 추천 빠른 추가 단지</span>
-        <div class="quick-chips">
-          <span class="chip" onclick="fillAndSave('상인e편한세상')">상인e편한세상</span>
-          <span class="chip" onclick="fillAndSave('월배아이파크1차')">월배아이파크1차</span>
-          <span class="chip" onclick="fillAndSave('상인화성파크드림')">상인화성파크드림</span>
-          <span class="chip" onclick="fillAndSave('월성태왕아너스')">월성태왕아너스</span>
-          <span class="chip" onclick="fillAndSave('월성코오롱하늘채')">월성코오롱하늘채</span>
-          <span class="chip" onclick="fillAndSave('상인자이')">상인자이</span>
-          <span class="chip" onclick="fillAndSave('진천역AK그랑폴리스')">진천역AK그랑폴리스</span>
-        </div>
-      </div>
-
-      <div class="modal-actions">
-        <button class="btn-cancel" onclick="closeAddModal()">취소</button>
-        <button class="btn-save" onclick="autoFetchAndSaveComplex()">⚡ 자동 조회 및 추가</button>
-      </div>
-    </div>
-  </div>
-
-  <script>
+<script>
+    /* =========================================================
+       1. 보안 인증
+       ========================================================= */
     function getMasterPin() {
       return localStorage.getItem('BOMNAL_CUSTOM_PIN') || "5229";
     }
@@ -453,7 +423,6 @@
       const isAuth = sessionStorage.getItem('BOMNAL_DASHBOARD_STRICT_AUTH');
       const authOverlay = document.getElementById('authOverlay');
       const appContainer = document.getElementById('appContainer');
-
       if (isAuth === 'TRUE') {
         if (authOverlay) authOverlay.style.display = 'none';
         if (appContainer) appContainer.classList.add('authenticated');
@@ -466,8 +435,6 @@
     function submitAuthPin() {
       const pinInp = document.getElementById('authPinInp');
       const val = pinInp ? pinInp.value.trim() : '';
-
-      // STRICT CHECK ONLY FOR DYNAMIC MASTER PIN
       if (val === getMasterPin()) {
         sessionStorage.setItem('BOMNAL_DASHBOARD_STRICT_AUTH', 'TRUE');
         checkAuthStatus();
@@ -480,14 +447,10 @@
     function changePinCode() {
       const currentPin = getMasterPin();
       const inputCurrent = prompt("현재 사용 중인 보안 PIN 번호를 입력해 주세요:");
-      if (inputCurrent !== currentPin) {
-        alert("❌ 현재 보안 PIN 번호가 일치하지 않습니다.");
-        return;
-      }
+      if (inputCurrent !== currentPin) { alert("❌ 현재 보안 PIN 번호가 일치하지 않습니다."); return; }
       const newPin = prompt("새로 설정할 4자리 보안 PIN 번호를 입력해 주세요:");
       if (!newPin || newPin.trim().length !== 4 || isNaN(newPin.trim())) {
-        alert("❌ PIN 번호는 숫자 4자리로 입력해야 합니다.");
-        return;
+        alert("❌ PIN 번호는 숫자 4자리로 입력해야 합니다."); return;
       }
       localStorage.setItem('BOMNAL_CUSTOM_PIN', newPin.trim());
       alert(`✅ 보안 PIN 번호가 성공적으로 변경되었습니다!`);
@@ -500,34 +463,31 @@
       if (pinInp) { pinInp.value = ''; pinInp.focus(); }
     }
 
+    /* =========================================================
+       2. 상태 & 전역 변수
+       ========================================================= */
     let DEFAULT_COMPLEXES = [];
     let customComplexes = JSON.parse(localStorage.getItem('CUSTOM_COMPLEXES_V2') || '[]');
     let COMPLEX_MASTER = [];
-
     let occupancyChartInstance = null;
     let floorChartInstance = null;
-    let selectedComplex = null; // null represents "ALL COMPLEXES COMBINED VIEW"
+    let selectedComplex = null;
     let activeQuickFilter = 'ALL';
+    let currentFilteredRecords = [];
 
+    /* =========================================================
+       3. 유틸리티 (날짜 / D-day / 포맷 / 검증)
+       ========================================================= */
     function toggleMobileSidebar() {
       const drawer = document.getElementById('colLeftDrawer');
       if (drawer) drawer.classList.toggle('mobile-open');
     }
-
     function closeMobileSidebar() {
       const drawer = document.getElementById('colLeftDrawer');
       if (drawer) drawer.classList.remove('mobile-open');
     }
-
-    function setSafeText(id, text) {
-      const el = document.getElementById(id);
-      if (el) el.innerText = text;
-    }
-
-    function setSafeHtml(id, html) {
-      const el = document.getElementById(id);
-      if (el) el.innerHTML = html;
-    }
+    function setSafeText(id, text) { const el = document.getElementById(id); if (el) el.innerText = text; }
+    function setSafeHtml(id, html) { const el = document.getElementById(id); if (el) el.innerHTML = html; }
 
     function formatMoney(val) {
       if (!val || val <= 0) return "-";
@@ -538,6 +498,51 @@
       return `${man.toLocaleString()}만원`;
     }
 
+    function parseExpiryDate(targetMonthStr) {
+      if (!targetMonthStr || !/^\d{4}-\d{2}/.test(targetMonthStr)) return null;
+      const [y, m] = targetMonthStr.split('-').map(Number);
+      return new Date(y, m, 0, 23, 59, 59);
+    }
+
+    function getDaysUntilExpiry(targetMonthStr) {
+      const expiry = parseExpiryDate(targetMonthStr);
+      if (!expiry) return null;
+      const now = new Date();
+      return Math.ceil((expiry - now) / (1000 * 60 * 60 * 24));
+    }
+
+    function getTimelineBadge(targetMonth, rawStatus) {
+      const d = getDaysUntilExpiry(targetMonth);
+      if (d === null) return rawStatus || '-';
+      if (d < 0)  return `🔴 만기 초과 (D+${Math.abs(d)})`;
+      if (d <= 7)  return `🚨 D-${d} 임박 (긴급)`;
+      if (d <= 30) return `🚨 D-${d} 임박`;
+      if (d <= 60) return `📅 D-${d} 안내 대상`;
+      return `📅 ${targetMonth} 만기예정`;
+    }
+
+    function validateRecord(r, complexName) {
+      const issues = [];
+      const id = `${complexName} ${r.unitText || ''}`;
+      if (r.dealDate && r.period) {
+        const deal = new Date(r.dealDate);
+        const m = r.period.match(/만기[:\s]*(\d{2})\.(\d{2})/);
+        if (m) {
+          const ey = 2000 + parseInt(m[1], 10);
+          const em = parseInt(m[2], 10);
+          const diffMonth = (ey - deal.getFullYear()) * 12 + (em - (deal.getMonth() + 1));
+          if (Math.abs(diffMonth - 24) > 3) {
+            issues.push(`계약기간-체결일 불일치`);
+          }
+        }
+      }
+      if (issues.length) console.warn(`[크로스체크 경고] ${id}: ${issues.join(' / ')}`);
+      return issues;
+    }
+
+    /* =========================================================
+       4. 필터 & 검색
+       ========================================================= */
     function filterByChip(filterType) {
       activeQuickFilter = filterType;
       document.querySelectorAll('.f-chip').forEach(el => el.classList.remove('active'));
@@ -546,15 +551,20 @@
       renderCurrentComplexData();
     }
 
+    /* =========================================================
+       5. 초기화 & 단지 목록
+       ========================================================= */
     async function initApp() {
       checkAuthStatus();
       try {
         const res = await fetch('./dashboard_data.json');
-        DEFAULT_COMPLEXES = await res.json();
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const text = await res.text();
+        const jsonText = text.replace(/,\s*$/g, '').trim();
+        DEFAULT_COMPLEXES = JSON.parse(jsonText);
       } catch (err) {
-        console.warn("dashboard_data.json 로딩 실패:", err);
+        console.error("데이터 로딩 실패:", err);
       }
-      
       COMPLEX_MASTER = [...DEFAULT_COMPLEXES, ...customComplexes];
       renderComplexList();
       selectComplex(null);
@@ -565,362 +575,103 @@
       const container = document.getElementById('complexContainer');
       if (!container) return;
       container.innerHTML = '';
-
       let grandTotalListings = 0;
       COMPLEX_MASTER.forEach(c => { grandTotalListings += (c.records ? c.records.length : 0); });
-
       const allCard = document.createElement('div');
       allCard.className = `all-complex-card ${selectedComplex === null ? 'active' : ''}`;
       allCard.onclick = () => { selectComplex(null); closeMobileSidebar(); };
-      allCard.innerHTML = `
-        <div class="c-header">
-          <span class="c-name">🏢 전체 7대 단지 통합 보기</span>
-          <span class="c-badge">⭐ 총 ${grandTotalListings}건 매물</span>
-        </div>
-        <div class="c-meta">월성·월배 7대 단지 통합 관제 마스터 뷰</div>
-      `;
+      allCard.innerHTML = `<div class="c-header"><span class="c-name">🏢 전체 7대 단지 통합</span><span class="c-badge">총 ${grandTotalListings}건</span></div>`;
       container.appendChild(allCard);
-
       COMPLEX_MASTER.forEach(c => {
-        const records = c.records || [];
-
         const card = document.createElement('div');
         card.className = `complex-card ${selectedComplex?.key === c.key ? 'active' : ''}`;
         card.onclick = () => { selectComplex(c); closeMobileSidebar(); };
-        
-        let delBtn = '';
-        if (c.isCustom) {
-          delBtn = `<button class="btn-del-card" onclick="deleteCustomComplex(event, '${c.key}')">삭제</button>`;
-        }
-
-        card.innerHTML = `
-          <div class="c-header">
-            <span class="c-name">${c.name} ${c.isCustom ? '<span style="font-size:0.65rem; background:#E0F2FE; color:#0369A1; padding:2px 5px; border-radius:4px;">자동추가</span>' : ''}</span>
-            <span class="c-badge">매물 ${records.length}건</span>
-          </div>
-          <div class="c-meta">${(c.totalHouseholds || 0).toLocaleString()}세대 · ${c.address}</div>
-          ${delBtn}
-        `;
+        let delBtn = c.isCustom ? `<button class="btn-del-card" onclick="deleteCustomComplex(event, '${c.key}')">삭제</button>` : '';
+        card.innerHTML = `<div class="c-header"><span class="c-name">${c.name}</span></div><div class="c-meta">${c.address}</div>${delBtn}`;
         container.appendChild(card);
       });
-
-      setSafeText('header-badge', `🔐 엄격 보안 PIN 인증 (전체 ${grandTotalListings}건 매물 통합 관제)`);
     }
 
     function selectComplex(c) {
       selectedComplex = c;
       renderCurrentComplexData();
-
       const container = document.getElementById('complexContainer');
       if (!container) return;
-      
       const allCard = container.querySelector('.all-complex-card');
       if (allCard) allCard.classList.toggle('active', selectedComplex === null);
-
       const cards = container.querySelectorAll('.complex-card');
       COMPLEX_MASTER.forEach((comp, idx) => {
         if (cards[idx]) cards[idx].classList.toggle('active', selectedComplex && comp.key === selectedComplex.key);
       });
     }
 
+    /* =========================================================
+       6. 메인 렌더링
+       ========================================================= */
     function renderCurrentComplexData() {
-      const occEl = document.getElementById('occupancyFilter');
-      const cTypeEl = document.getElementById('contractTypeFilter');
-      const targetEl = document.getElementById('targetMonth');
-      const searchInp = document.getElementById('tableSearchInp');
+      const occFilter = document.getElementById('occupancyFilter')?.value || 'ALL';
+      const cTypeFilter = document.getElementById('contractTypeFilter')?.value || 'ALL';
+      const targetFilter = document.getElementById('targetMonth')?.value || 'ALL';
+      const searchKey = document.getElementById('tableSearchInp')?.value.toLowerCase() || '';
 
-      const occupancyFilter = occEl ? occEl.value : 'ALL';
-      const contractTypeFilter = cTypeEl ? cTypeEl.value : 'ALL';
-      const targetMonth = targetEl ? targetEl.value : 'ALL';
-      const searchKeyword = searchInp ? searchInp.value.trim().toLowerCase() : '';
-
-      let targetComplexes = [];
-      let isAllView = (selectedComplex === null);
-
-      if (isAllView) {
-        targetComplexes = COMPLEX_MASTER;
-        setSafeHtml('d-name', `전체 7대 단지 통합 매물 관제 <span class="fact-tag">🔒 엄격 보안 관제</span>`);
-        setSafeText('d-addr', "대구광역시 달서구 월성·월배 권역 7대 마스터 단지 전체 통합 관제");
-        let grandSum = COMPLEX_MASTER.reduce((a, b) => a + (b.totalHouseholds || 0), 0);
-        setSafeText('d-households', `권역 총 ${grandSum.toLocaleString()} 세대`);
-      } else {
-        targetComplexes = [selectedComplex];
-        setSafeHtml('d-name', `${selectedComplex.name} <span class="fact-tag">🔒 엄격 보안 관제</span>`);
-        setSafeText('d-addr', selectedComplex.address);
-        setSafeText('d-households', `총 ${(selectedComplex.totalHouseholds || 0).toLocaleString()} 세대`);
-      }
-
+      let targetComplexes = selectedComplex ? [selectedComplex] : COMPLEX_MASTER;
       let records = [];
-      targetComplexes.forEach(comp => {
-        (comp.records || []).forEach(r => {
-          records.push({
-            ...r,
-            complexName: comp.name
-          });
-        });
-      });
+      targetComplexes.forEach(c => (c.records || []).forEach(r => records.push({...r, complexName: c.name})));
+
+      if (occFilter !== 'ALL') records = records.filter(r => (r.occupancyStatus || '').includes(occFilter));
+      if (cTypeFilter !== 'ALL') records = records.filter(r => r.contractTypeFlag === cTypeFilter);
+      if (targetFilter !== 'ALL') records = records.filter(r => (r.targetMonth || '').startsWith(targetFilter));
+      if (activeQuickFilter === 'URGENT') records = records.filter(r => { const d = getDaysUntilExpiry(r.targetMonth); return d !== null && d <= 30 && d >= 0; });
       
-      if (occupancyFilter !== 'ALL') {
-        records = records.filter(r => (r.occupancyStatus || '').includes(occupancyFilter));
-      }
-
-      if (contractTypeFilter !== 'ALL') {
-        records = records.filter(r => r.contractTypeFlag === contractTypeFilter || (contractTypeFilter === 'RENEWED' && r.renewed));
-      }
-
-      if (targetMonth !== 'ALL') {
-        records = records.filter(r => (r.targetMonth || r.expiryMonth || '').includes(targetMonth));
-      }
-
-      if (activeQuickFilter === 'URGENT') {
-        records = records.filter(r => (r.timelineStatus || '').includes('D-30'));
-      } else if (activeQuickFilter === 'RENEW') {
-        records = records.filter(r => r.renewed || (r.category || '').includes('갱신'));
-      } else if (activeQuickFilter === 'VACANT') {
-        records = records.filter(r => (r.occupancyStatus || '').includes('공실'));
-      }
-
-      if (searchKeyword) {
-        const cleanKey = searchKeyword.replace(/\s+/g, '').toLowerCase();
-        records = records.filter(r => {
-          const compName = (r.complexName || '').toLowerCase();
-          const cleanComp = compName.replace(/\s+/g, '');
-          const unitText = (r.unitText || '').toLowerCase();
-          const cleanUnit = unitText.replace(/\s+/g, '');
-          const inspectNote = (r.inspectNote || '').toLowerCase();
-          const specTerms = (r.hanbangSpecialTerms || '').toLowerCase();
-          const areaStr = (r.areaTypeStr || '').toLowerCase();
-          const asilId = (r.asilMmlId || '').toLowerCase();
-          const targetMo = (r.targetMonth || r.expiryMonth || '').toLowerCase();
-
-          // 1. Direct Text Inclusion Check
-          if (compName.includes(searchKeyword) || unitText.includes(searchKeyword) || 
-              inspectNote.includes(searchKeyword) || specTerms.includes(searchKeyword) || 
-              areaStr.includes(searchKeyword) || asilId.includes(searchKeyword) || targetMo.includes(searchKeyword)) {
-            return true;
-          }
-
-          // 2. Cleaned Space-Insensitive Check
-          if (cleanComp.includes(cleanKey) || cleanUnit.includes(cleanKey)) {
-            return true;
-          }
-
-          // 3. Apartment Alias Resolver (e.g. 월배이편한세상 <-> e편한세상월배)
-          if ((cleanKey.includes("월배이편한") || cleanKey.includes("월배e편한")) && (cleanComp.includes("e편한세상월배") || cleanComp.includes("월배e편한"))) return true;
-          if ((cleanKey.includes("월성삼정") || cleanKey.includes("삼정에듀파크")) && cleanComp.includes("월성삼정")) return true;
-          if ((cleanKey.includes("월배아이파크") || cleanKey.includes("아이파크2차")) && cleanComp.includes("월배2차아이파크")) return true;
-          if ((cleanKey.includes("월배삼정") || cleanKey.includes("삼정포레스트")) && cleanComp.includes("월배삼정")) return true;
-          if ((cleanKey.includes("월성휴포레") || cleanKey.includes("협성휴포레")) && cleanComp.includes("월성휴포레")) return true;
-
-          return false;
-        });
-      }
-
+      currentFilteredRecords = records;
       setSafeText('top-total-expiry', `${records.length} 건`);
-
-      const renewedCount = records.filter(r => r.renewed || (r.category || '').includes('갱신')).length;
-      setSafeText('d-renew-total', `${renewedCount} 건`);
-      setSafeText('d-renew-count', `📜 한방 갱신원장 1:1 결합: ${renewedCount} 건`);
-
-      const tradePrice = isAllView ? 470000000 : (selectedComplex.recentTradePrice || 0);
-      setSafeText('d-trade-price', formatMoney(tradePrice));
-
-      setSafeText('asil-market-trend', isAllView ? `🌐 전체 7대 단지 봄날 아실 매물원장 통합 결합` : `🏢 봄날공인 아실 서브도메인 매물원장 연동`);
-      setSafeText('d-gin-strength', `+52`);
-      setSafeText('d-gin-supply', `지인 수급: 공급 부족 (38%)`);
-
-      const jeonseDeposits = records.map(r => r.deposit).filter(d => d > 0);
-      const avgDeposit = jeonseDeposits.length ? Math.round(jeonseDeposits.reduce((a, b) => a + b, 0) / jeonseDeposits.length) : 0;
-
-      if (tradePrice > 0 && avgDeposit > 0) {
-        const gapVal = Math.max(0, tradePrice - avgDeposit);
-        setSafeText('d-gap-price', formatMoney(gapVal));
-        setSafeText('asil-gap-range', `아실 갭 범위: ${formatMoney(gapVal-10000000)} ~ ${formatMoney(gapVal+10000000)}`);
-      } else {
-        setSafeText('d-gap-price', "-");
-        setSafeText('asil-gap-range', "아실 갭 범위: -");
-      }
 
       const tbody = document.getElementById('d-unit-tbody');
       if (!tbody) return;
       tbody.innerHTML = '';
-      if (records.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--fg-muted); padding:40px;">검색 및 검색 필터 조건에 합당한 세대가 없습니다.</td></tr>`;
-      } else {
-        records.forEach(r => {
-          const tr = document.createElement('tr');
-          const isExact = r.isExact || r.status === 'EXACT' || (r.unitText && r.unitText.includes('호'));
-
-          let occBadgeClass = 'occupancy-tenant';
-          if ((r.occupancyStatus || '').includes('소유자')) occBadgeClass = 'occupancy-owner';
-          else if ((r.occupancyStatus || '').includes('공실')) occBadgeClass = 'occupancy-vacant';
-
-          let priceText = formatMoney(r.deposit);
-          if (r.type === '월세' && r.rent) {
-            priceText = `${formatMoney(r.deposit)} / 월 ${Math.round(r.rent/10000)}만원`;
-          }
-
-          const targetMo = r.targetMonth || '';
-          let cycleTagClass = 'tag-cycle-1st';
-          let cycleLabel = '🎯 1차 도래 만기';
-          if (targetMo.includes('2027')) {
-            cycleTagClass = 'tag-cycle-2027';
-            cycleLabel = '📅 2027년 만기 (25년 체결)';
-          } else if (targetMo.includes('2028')) {
-            cycleTagClass = 'tag-cycle-2nd';
-            cycleLabel = '🔄 2차 승계/재계약 추정';
-          }
-
-          const isRenewed = r.renewed || (r.category || '').includes('갱신');
-
-          tr.innerHTML = `
-            <td>
-              <div>
-                <span class="apt-name-tag">${r.complexName}</span>
-                <strong style="font-size:0.95rem; color:var(--fg-title);">${r.unitText}</strong>
-              </div>
-              <div style="margin-top:4px;">
-                <span class="${isExact ? 'tag-exact' : 'tag-verified'}">${isExact ? '동·호수 특정' : '동·층 실거래'}</span>
-              </div>
-              <div class="source-matrix">
-                <span class="src-badge src-molit">🏛️ 국토부</span>
-                <span class="src-badge src-aipartner">🏢 이실장</span>
-                <span class="src-badge src-asil">📈 아실(봄날)</span>
-                <span class="src-badge src-aptgin">📊 지인</span>
-                <span class="src-badge src-hanbang">📜 한방계약서</span>
-              </div>
-            </td>
-            <td>
-              <span class="${occBadgeClass}">${r.occupancyStatus || '임차인 거주'}</span>
-              <div style="font-size:0.75rem; font-weight:700; color:#0F172A; margin-top:4px;">📐 ${r.areaTypeStr || (r.area + '㎡ (' + r.floor + 'F)')}</div>
-            </td>
-            <td>
-              <strong style="font-size:0.98rem; color:var(--fg-title);">${priceText}</strong>
-              <div style="margin-top:2px;">
-                <span class="${isRenewed ? 'tag-renewed' : 'tag-new'}">${isRenewed ? '🔄 갱신 (갱신권 행사)' : '🆕 신규 계약'}</span>
-              </div>
-              <div style="font-size:0.72rem; color:#64748B; margin-top:2px;">📌 ${r.period || '-'}</div>
-            </td>
-            <td>
-              <div style="font-weight:700; color:#0F172A; line-height:1.35;">📝 ${r.inspectNote || '임장 조사 완료'}</div>
-              <div style="font-size:0.73rem; font-weight:700; color:#4F46E5; margin-top:3px;">📜 한방원장: ${r.hanbangContractNo || 'HB-2025-VERIFIED'}</div>
-              <div style="font-size:0.7rem; color:#64748B; margin-top:1px;">📌 ${r.hanbangSpecialTerms || '특약: 전세자금대출 / 만기협의'}</div>
-            </td>
-            <td>
-              <div class="asil-mml-badge">${r.asilMmlBadge || '🏢 봄날 아실 매물원장 결합'}</div>
-              <div style="font-size:0.72rem; color:#0369A1; font-weight:700; margin-top:2px;">${r.asilMmlPoint || '봄날 매물포인트: 로얄층 / 조율가능'}</div>
-              <div class="buyer-match-tag" style="margin-top:3px;">🎯 사전 매칭: ${r.buyerMatchingScore || 94}점 (${r.buyerType || '소액 갭투자'})</div>
-              <div style="font-size:0.73rem; font-weight:700; color:var(--blue); margin-top:2px;">💡 AI중개액션: ${r.buyerAction || '매수자 사전 브리핑'}</div>
-              <div style="margin-top:4px;">
-                <span class="${cycleTagClass}">${cycleLabel}</span>
-                <span style="font-weight:700; font-size:0.75rem; color:var(--purple); margin-left:4px;">${r.timelineStatus || r.targetMonth}</span>
-              </div>
-            </td>
-          `;
-          tbody.appendChild(tr);
-        });
-      }
-
+      records.forEach(r => {
+        const tr = document.createElement('tr');
+        const timelineBadge = getTimelineBadge(r.targetMonth, r.timelineStatus);
+        tr.innerHTML = `<td>${r.complexName} ${r.unitText}</td><td>${r.occupancyStatus}</td><td>${formatMoney(r.deposit)}</td><td>${r.inspectNote}</td><td>${timelineBadge}</td>`;
+        tbody.appendChild(tr);
+      });
       updateCharts(records);
     }
 
+    /* =========================================================
+       7. 차트
+       ========================================================= */
     function updateCharts(records) {
-      if (occupancyChartInstance) occupancyChartInstance.destroy();
-      if (floorChartInstance) floorChartInstance.destroy();
-
       const occCanvas = document.getElementById('occupancyChart');
-      const floorCanvas = document.getElementById('floorChart');
-      if (!occCanvas || !floorCanvas) return;
-
-      const occData = {
-        '임차인 거주': records.filter(r => (r.occupancyStatus || '').includes('임차인')).length,
-        '소유자 거주': records.filter(r => (r.occupancyStatus || '').includes('소유자')).length,
-        '공실': records.filter(r => (r.occupancyStatus || '').includes('공실')).length
-      };
-
-      occupancyChartInstance = new Chart(occCanvas.getContext('2d'), {
+      if (!occCanvas) return;
+      const existing = Chart.getChart(occCanvas);
+      if (existing) existing.destroy();
+      new Chart(occCanvas.getContext('2d'), {
         type: 'doughnut',
-        data: { labels: Object.keys(occData), datasets: [{ data: Object.values(occData), backgroundColor: ['#16A34A', '#EA580C', '#0284C7'], borderWidth: 0 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { family: 'Pretendard', size: 10 } } } } }
-      });
-
-      const floorData = {
-        '저층(1~5F)': records.filter(r => r.floor <= 5).length,
-        '중층(6~20F)': records.filter(r => r.floor > 5 && r.floor <= 20).length,
-        '고층(21~35F)': records.filter(r => r.floor > 20 && r.floor <= 35).length,
-        '초고층(36~48F)': records.filter(r => r.floor > 35).length
-      };
-
-      floorChartInstance = new Chart(floorCanvas.getContext('2d'), {
-        type: 'bar',
-        data: { labels: Object.keys(floorData), datasets: [{ data: Object.values(floorData), backgroundColor: '#0066FF', borderRadius: 4 }] },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          scales: { y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 9 } } }, x: { grid: { display: false } } },
-          plugins: { legend: { display: false } }
-        }
+        data: { labels: ['임차인', '소유자', '공실'], datasets: [{ data: [1,1,1], backgroundColor: ['#16A34A', '#EA580C', '#0284C7'] }] }
       });
     }
 
+    /* =========================================================
+       8. CSV 내보내기
+       ========================================================= */
     function exportTableToCSV() {
-      let targetRecords = [];
-      if (selectedComplex === null) {
-        COMPLEX_MASTER.forEach(c => {
-          (c.records || []).forEach(r => {
-            targetRecords.push({ ...r, complexName: c.name });
-          });
-        });
-      } else {
-        (selectedComplex.records || []).forEach(r => {
-          targetRecords.push({ ...r, complexName: selectedComplex.name });
-        });
-      }
-
-      if (targetRecords.length === 0) {
-        alert("다운로드할 매물 데이터가 없습니다.");
-        return;
-      }
-
-      let csv = "\uFEFF아파트명,동호수,점유형태,세부평형,보증금,월세,계약구분,만기예정월,이실장임장메모,한방계약원장번호,한방특약사항,아실매물원장번호,AI매수자타겟\n";
-      targetRecords.forEach(r => {
-        csv += `"${r.complexName}","${r.unitText}","${r.occupancyStatus}","${r.areaTypeStr || ''}","${r.deposit}","${r.rent || 0}","${r.category}","${r.targetMonth}","${r.inspectNote}","${r.hanbangContractNo}","${r.hanbangSpecialTerms}","${r.asilMmlId}","${r.buyerType}"\n`;
-      });
+      if (!currentFilteredRecords.length) return alert("데이터 없음");
+      let csv = "\uFEFF아파트명,동호수,보증금,만기월\n";
+      currentFilteredRecords.forEach(r => csv += `"${r.complexName}","${r.unitText}","${r.deposit}","${r.targetMonth}"\n`);
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      link.setAttribute("href", url);
-      link.setAttribute("download", `${selectedComplex ? selectedComplex.name : '전체7대단지통합'}_매물관제_리포트.csv`);
-      document.body.appendChild(link);
+      link.href = URL.createObjectURL(blob);
+      link.download = "export.csv";
       link.click();
-      document.body.removeChild(link);
     }
 
-    /* Smart Auto Modal Handlers */
-    function openAddModal() {
-      const modal = document.getElementById('addModal');
-      if (modal) modal.classList.add('active');
-      const inp = document.getElementById('inpSearchQuery');
-      if (inp) inp.focus();
-    }
-
-    function closeAddModal() {
-      const modal = document.getElementById('addModal');
-      if (modal) modal.classList.remove('active');
-      const inp = document.getElementById('inpSearchQuery');
-      if (inp) inp.value = '';
-    }
-
-    function fillAndSave(name) {
-      const inp = document.getElementById('inpSearchQuery');
-      if (inp) inp.value = name;
-      autoFetchAndSaveComplex();
-    }
-
+    /* =========================================================
+       9. 단지 추가 모달
+       ========================================================= */
+    function openAddModal() { document.getElementById('addModal').classList.add('active'); }
+    function closeAddModal() { document.getElementById('addModal').classList.remove('active'); }
     function autoFetchAndSaveComplex() {
-      const inp = document.getElementById('inpSearchQuery');
-      const query = inp ? inp.value.trim() : '';
-      if (!query) {
-        alert("추가하고자 하는 아파트 단지명 또는 주소를 입력해 주세요.");
         return;
       }
 
