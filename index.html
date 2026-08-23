@@ -681,14 +681,39 @@
       }
 
       if (searchKeyword) {
-        records = records.filter(r => 
-          (r.complexName || '').toLowerCase().includes(searchKeyword) ||
-          (r.unitText || '').toLowerCase().includes(searchKeyword) ||
-          (r.inspectNote || '').toLowerCase().includes(searchKeyword) ||
-          (r.hanbangSpecialTerms || '').toLowerCase().includes(searchKeyword) ||
-          (r.areaTypeStr || '').toLowerCase().includes(searchKeyword) ||
-          (r.asilMmlId || '').toLowerCase().includes(searchKeyword)
-        );
+        const cleanKey = searchKeyword.replace(/\s+/g, '').toLowerCase();
+        records = records.filter(r => {
+          const compName = (r.complexName || '').toLowerCase();
+          const cleanComp = compName.replace(/\s+/g, '');
+          const unitText = (r.unitText || '').toLowerCase();
+          const cleanUnit = unitText.replace(/\s+/g, '');
+          const inspectNote = (r.inspectNote || '').toLowerCase();
+          const specTerms = (r.hanbangSpecialTerms || '').toLowerCase();
+          const areaStr = (r.areaTypeStr || '').toLowerCase();
+          const asilId = (r.asilMmlId || '').toLowerCase();
+          const targetMo = (r.targetMonth || r.expiryMonth || '').toLowerCase();
+
+          // 1. Direct Text Inclusion Check
+          if (compName.includes(searchKeyword) || unitText.includes(searchKeyword) || 
+              inspectNote.includes(searchKeyword) || specTerms.includes(searchKeyword) || 
+              areaStr.includes(searchKeyword) || asilId.includes(searchKeyword) || targetMo.includes(searchKeyword)) {
+            return true;
+          }
+
+          // 2. Cleaned Space-Insensitive Check
+          if (cleanComp.includes(cleanKey) || cleanUnit.includes(cleanKey)) {
+            return true;
+          }
+
+          // 3. Apartment Alias Resolver (e.g. 월배이편한세상 <-> e편한세상월배)
+          if ((cleanKey.includes("월배이편한") || cleanKey.includes("월배e편한")) && (cleanComp.includes("e편한세상월배") || cleanComp.includes("월배e편한"))) return true;
+          if ((cleanKey.includes("월성삼정") || cleanKey.includes("삼정에듀파크")) && cleanComp.includes("월성삼정")) return true;
+          if ((cleanKey.includes("월배아이파크") || cleanKey.includes("아이파크2차")) && cleanComp.includes("월배2차아이파크")) return true;
+          if ((cleanKey.includes("월배삼정") || cleanKey.includes("삼정포레스트")) && cleanComp.includes("월배삼정")) return true;
+          if ((cleanKey.includes("월성휴포레") || cleanKey.includes("협성휴포레")) && cleanComp.includes("월성휴포레")) return true;
+
+          return false;
+        });
       }
 
       setSafeText('top-total-expiry', `${records.length} 건`);
