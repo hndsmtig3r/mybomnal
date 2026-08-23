@@ -371,20 +371,13 @@
 
             <select id="contractTypeFilter" class="filter-select" onchange="renderCurrentComplexData()">
               <option value="ALL">계약 구분: 전체</option>
-              <option value="RENEWED">🔄 갱신계약 세대</option>
+              <option value="RENEWED_EXECUTED">🔄 갱신체결 완료 (원장 보관)</option>
+              <option value="RENEWAL_PENDING">📅 갱신 만기예정 (청구권 대상)</option>
               <option value="NEW">🆕 신규계약 세대</option>
             </select>
 
             <select id="targetMonth" class="filter-select" onchange="renderCurrentComplexData()">
-              <option value="ALL">만기 예정월: 전체</option>
-              <option value="2026">2026년 전체</option>
-              <option value="2026-08">2026년 08월</option>
-              <option value="2026-09">2026년 09월</option>
-              <option value="2026-10">2026년 10월</option>
-              <option value="2026-11">2026년 11월</option>
-              <option value="2026-12">2026년 12월</option>
-              <option value="2027">2027년 전체</option>
-              <option value="2028">2028년 전체</option>
+              <option value="ALL">📅 만기 예정월: 전체 선택</option>
             </select>
 
             <button class="btn-csv-export" onclick="exportTableToCSV()">📥 CSV 내보내기</button>
@@ -633,6 +626,48 @@
       selectComplex(null);
     }
 
+    
+    function populateMonthFilterOptions() {
+      const targetEl = document.getElementById('targetMonth');
+      if (!targetEl) return;
+      const currentVal = targetEl.value || 'ALL';
+
+      let targetComplexes = selectedComplex ? [selectedComplex] : COMPLEX_MASTER;
+      const monthCounts = new Map();
+      let totalCount = 0;
+
+      targetComplexes.forEach(c => {
+        (c.records || []).forEach(r => {
+          totalCount++;
+          if (r.targetMonth) {
+            monthCounts.set(r.targetMonth, (monthCounts.get(r.targetMonth) || 0) + 1);
+          }
+        });
+      });
+
+      const sortedMonths = Array.from(monthCounts.keys()).sort();
+      let html = `<option value="ALL">📅 만기 예정월: 전체 (${totalCount}세대)</option>`;
+      html += `<option value="2026">📅 2026년 전체 만기 세대</option>`;
+      html += `<option value="2027">📅 2027년 전체 만기 세대</option>`;
+      html += `<option value="2028">📅 2028년 전체 만기 세대</option>`;
+      html += `<option disabled>──────────월별 상세 만기──────────</option>`;
+
+      sortedMonths.forEach(m => {
+        const count = monthCounts.get(m);
+        const parts = m.split('-');
+        if (parts.length === 2) {
+          const y = parts[0];
+          const mm = parseInt(parts[1], 10);
+          html += `<option value="${m}">${y}년 ${mm}월 만기 (${count}세대)</option>`;
+        }
+      });
+
+      targetEl.innerHTML = html;
+      if (currentVal && Array.from(targetEl.options).some(o => o.value === currentVal)) {
+        targetEl.value = currentVal;
+      }
+    }
+
     function renderComplexList() {
       COMPLEX_MASTER = [...DEFAULT_COMPLEXES, ...customComplexes];
       const container = document.getElementById('complexContainer');
@@ -732,7 +767,13 @@
       }
 
       if (contractTypeFilter !== 'ALL') {
-        records = records.filter(r => r.contractTypeFlag === contractTypeFilter);
+        if (contractTypeFilter === 'RENEWED_EXECUTED') {
+          records = records.filter(r => r.contractTypeFlag === 'RENEWED_EXECUTED' || (r.category && r.category.includes('체결')));
+        } else if (contractTypeFilter === 'RENEWAL_PENDING') {
+          records = records.filter(r => r.contractTypeFlag === 'RENEWAL_PENDING' || (r.category && r.category.includes('만기예정')));
+        } else {
+          records = records.filter(r => r.contractTypeFlag === contractTypeFilter);
+        }
       }
 
       if (targetMonth !== 'ALL') {
@@ -782,6 +823,7 @@
         });
       }
 
+      populateMonthFilterOptions();
       currentFilteredRecords = records;
 
       setSafeText('top-total-expiry', `${records.length} 건`);
