@@ -371,8 +371,7 @@
 
             <select id="contractTypeFilter" class="filter-select" onchange="renderCurrentComplexData()">
               <option value="ALL">계약 구분: 전체</option>
-              <option value="RENEWED_EXECUTED">🔄 갱신체결 완료 (원장 보관)</option>
-              <option value="RENEWAL_PENDING">📅 갱신 만기예정 (청구권 대상)</option>
+              <option value="RENEWED">🔄 갱신계약 세대</option>
               <option value="NEW">🆕 신규계약 세대</option>
             </select>
 
@@ -733,13 +732,7 @@
       }
 
       if (contractTypeFilter !== 'ALL') {
-        if (contractTypeFilter === 'RENEWED_EXECUTED') {
-          records = records.filter(r => r.contractTypeFlag === 'RENEWED_EXECUTED' || (r.category && r.category.includes('체결')));
-        } else if (contractTypeFilter === 'RENEWAL_PENDING') {
-          records = records.filter(r => r.contractTypeFlag === 'RENEWAL_PENDING' || (r.category && r.category.includes('만기예정')));
-        } else {
-          records = records.filter(r => r.contractTypeFlag === contractTypeFilter);
-        }
+        records = records.filter(r => r.contractTypeFlag === contractTypeFilter);
       }
 
       if (targetMonth !== 'ALL') {
